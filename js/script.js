@@ -623,6 +623,7 @@ let scene, camera, renderer, cloth, clothMesh, raycaster, mouse;
 let time = 0.0;
 let selection = 0;
 let isMouseDown = false;
+let isTouchActive = false;
 
 function init() {
 	// Scene setup
@@ -665,7 +666,16 @@ function init() {
 	renderer.domElement.addEventListener('mousemove', onMouseMove);
 	renderer.domElement.addEventListener('mousedown', onMouseDown);
 	renderer.domElement.addEventListener('mouseup', onMouseUp);
-	window.addEventListener('blur', onMouseUp);
+	window.addEventListener('blur', () => {
+		onMouseUp();
+		onTouchEnd();
+	});
+	
+	// Touch event listeners for mobile support
+	renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+	renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+	renderer.domElement.addEventListener('touchend', onTouchEnd);
+	renderer.domElement.addEventListener('touchcancel', onTouchEnd);
 
 	// Start animation loop
 	animate();
@@ -768,9 +778,13 @@ function onWindowResize() {
 	renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
+function updateMousePosition(clientX, clientY) {
+	mouse.x = (clientX / window.innerWidth) * 2 - 1;
+	mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+}
+
 function onMouseMove(event) {
-	mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-	mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+	updateMousePosition(event.clientX, event.clientY);
 	
 	if (!isMouseDown && clothMesh) {
 		updateSelection();
@@ -787,6 +801,54 @@ function onMouseDown(event) {
 
 function onMouseUp(event) {
 	isMouseDown = false;
+	if (clothMesh && selection !== ClothConfig.width*ClothConfig.height-1 && 
+	    selection !== ClothConfig.width*(ClothConfig.height-1)) {
+		cloth.pointStatusSet(selection, 0);
+	}
+}
+
+function onTouchStart(event) {
+	event.preventDefault(); // Prevent scrolling
+	isTouchActive = true;
+	
+	if (event.touches.length > 0) {
+		const touch = event.touches[0];
+		updateMousePosition(touch.clientX, touch.clientY);
+		
+		// Update selection on touch start
+		if (clothMesh) {
+			updateSelection();
+		}
+		
+		// Pin the point similar to mousedown
+		if (clothMesh && selection !== ClothConfig.width*ClothConfig.height-1 && 
+		    selection !== ClothConfig.width*(ClothConfig.height-1)) {
+			cloth.pointStatusSet(selection, 1);
+		}
+	}
+}
+
+function onTouchMove(event) {
+	event.preventDefault(); // Prevent scrolling
+	
+	if (event.touches.length > 0) {
+		const touch = event.touches[0];
+		updateMousePosition(touch.clientX, touch.clientY);
+		
+		// Selection is already set from touchstart, but we update it during move
+		// to track the touch position continuously
+		if (clothMesh) {
+			updateSelection();
+		}
+	}
+}
+
+function onTouchEnd(event) {
+	if (event) {
+		event.preventDefault();
+	}
+	isTouchActive = false;
+	
 	if (clothMesh && selection !== ClothConfig.width*ClothConfig.height-1 && 
 	    selection !== ClothConfig.width*(ClothConfig.height-1)) {
 		cloth.pointStatusSet(selection, 0);
@@ -844,8 +906,8 @@ function animate() {
 			cloth.wind[2] = sy;
 		}
 		
-		// Handle mouse interaction
-		if (isMouseDown) {
+		// Handle mouse/touch interaction
+		if (isMouseDown || isTouchActive) {
 			raycaster.setFromCamera(mouse, camera);
 			const direction = raycaster.ray.direction;
 			

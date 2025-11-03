@@ -8,6 +8,7 @@ canvas {
   padding: 0;
   border: none;
   overflow: hidden;
+  touch-action: none; /* Prevent default touch behaviors for better mobile interaction */
 }
 .info {
   position: absolute;
