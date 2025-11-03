@@ -19,7 +19,7 @@ const ClothConfig = {
 	height: 32, // Increase for finer detail
 	
 	// Physical size of the cloth in 3D space
-	physicalSize: 2.0, // meters (or arbitrary units)
+	physicalSize: 3.0, // meters (or arbitrary units)
 	
 	// Texture settings
 	texturePath: '/images/texture2.jpg', // Path to your texture image
@@ -646,7 +646,7 @@ function init() {
 		45, // Field of view (how wide the camera sees)
 		window.innerWidth / window.innerHeight, // Aspect ratio (width/height)
 		0.01, // Near clipping plane (objects closer than this are not rendered)
-		50   // Far clipping plane (objects further than this are not rendered)
+		30   // Far clipping plane (objects further than this are not rendered)
 	);
 	// Position the camera at a distance from the origin (0,0,0)
 	camera.position.set(0, 0, ClothConfig.cameraDistance);
@@ -662,7 +662,7 @@ function init() {
 
 	// Add lighting to the scene (without lights, objects would be pitch black)
 	// Ambient light: soft overall illumination (like daylight in a room)
-	const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+	const ambientLight = new THREE.AmbientLight(0xffffff, 1);
 	scene.add(ambientLight);
 	
 	// Directional light: light coming from a specific direction (like sunlight)
