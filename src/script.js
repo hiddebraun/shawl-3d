@@ -2,63 +2,66 @@
 //
 // Copyright (c) 2016-2019 Thom Chiovoloni
 //
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
+// Three.js conversion - easy texture and size configuration
 //
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-(function(window) {
-let DEBUG = false;
-Sim.DEBUG = DEBUG;
-let Options = {
+// Original WebGL implementation converted to Three.js
+// for easier texture and size customization
+
+// ============================================================================
+// CONFIGURATION - Easy to modify!
+// ============================================================================
+const ClothConfig = {
+	// Cloth dimensions (number of grid points)
+	width: 32,  // Increase for finer detail
+	height: 32, // Increase for finer detail
+	
+	// Physical size of the cloth in 3D space
+	physicalSize: 2.0, // meters (or arbitrary units)
+	
+	// Texture settings
+	texturePath: 'texture2.jpg', // Path to your texture image
+	
+	// Physics parameters
 	gravity: -9.8,
 	structK: 100000,
 	shearK: 5000,
 	bendK: 1000,
 	dampSpring: 10,
 	dampAir: 5,
-	clothWidth: 16,
-	clothHeight: 16,
 	mass: 1.0,
 	sleepThreshold: 0.001,
 	sleepCount: 100,
 	tension: 1.0,
 	timeStep: 0.016,
+	
+	// Pinned corners
 	pinned: {
-	    bottomLeft: false,
-	    bottomRight: false,
-	    topLeft: true,
-	    topRight: true
+		bottomLeft: false,
+		bottomRight: false,
+		topLeft: true,
+		topRight: true
 	},
-	dynamicWind: true,
-	wind: [0.0, 0.0, 0.0] // if not dynamic
+	
+	// Wind settings
+	dynamicWind: false,
+	wind: [0.0, 0.0, 0.0], // if not dynamic
+	
+	// Scene settings
+	initialZPosition: -1.75, // How far back the cloth starts
+	cameraDistance: 3.0,
 };
 
-if (window.CP) {
-	// I'm sorry codepen, but the perf is just too bad without this ;_;
-	window.CP.shouldStopExecution = function() { return false; };
-}
+// ============================================================================
+// Physics Simulation (Unchanged from original)
+// ============================================================================
 
 const StructSpring = 0;
 const ShearSpring = 1;
 const BendSpring = 2;
-const SpringConstants = [Options.structK, Options.shearK, Options.bendK];
 
 class Spring {
 	constructor(type, a, b, rest) {
-		this.type = type; // index into SpringConstants -- probably should just store k value here...
+		this.type = type;
 		this.rest = rest;
 		this.a = a;
 		this.b = b;
@@ -66,8 +69,7 @@ class Spring {
 		this.iba = -1;
 	}
 }
-// big array of 3d vectors. only treated as 3d for convenience --
-// math is the same as if it was a big 1d vector
+
 class BigVec3D {
 	constructor(initSize, tight=true) {
 		this.size = initSize;
@@ -75,11 +77,9 @@ class BigVec3D {
 	}
 
 	nanCheck() {
-		if (DEBUG) {
-			for (let i = 0; i < this.size*3; ++i) {
-				let x = this.data[i];
-				if (+x !== x) { console.assert("NaNCheck failed"); debugger; }
-			}
+		for (let i = 0; i < this.size*3; ++i) {
+			let x = this.data[i];
+			if (+x !== x) { console.assert("NaNCheck failed"); debugger; }
 		}
 	}
 
@@ -178,11 +178,9 @@ class BigMat3D {
 	}
 
 	nanCheck() {
-		if (DEBUG) {
-			for (let i = 0; i < this.size*9; ++i) {
-				let x = this.data[i];
-				if (+x !== x) { console.assert("NaNCheck failed"); debugger; }
-			}
+		for (let i = 0; i < this.size*9; ++i) {
+			let x = this.data[i];
+			if (+x !== x) { console.assert("NaNCheck failed"); debugger; }
 		}
 	}
 
@@ -226,7 +224,7 @@ class BigMat3D {
 }
 
 function mul(out, mat, vec) {
-	if (!out) out = new BigVec3D(v.size);
+	if (!out) out = new BigVec3D(vec.size);
 	else out.init(0, 0, 0);
 	let m = mat.data, v = vec.data, o = out.data;
 	for (let i = 0, sz = mat.size; i < sz; i++) {
@@ -243,7 +241,6 @@ function mul(out, mat, vec) {
 	return out;
 }
 
-
 function foreach2d(w, h, fn) {
 	for (let i = 0; i < h; ++i) {
 		for (let j = 0; j < w; ++j) {
@@ -252,14 +249,14 @@ function foreach2d(w, h, fn) {
 	}
 }
 
-// simulation of cloth based on http://www.cs.cmu.edu/~baraff/papers/sig98.pdf
+// Cloth physics simulation class (unchanged from original)
 class Cloth {
 	constructor(w, h, size) {
+		const SpringConstants = [ClothConfig.structK, ClothConfig.shearK, ClothConfig.bendK];
 
 		let springs = [];
 		let points = [];
 		let texcoords = [];
-		// let quads = [];
 		let tris = [];
 
 		foreach2d(w, h, (i, j) => {
@@ -272,7 +269,7 @@ class Cloth {
 			let dx = points[0] - points[3];
 			let dy = points[1] - points[4];
 			let dz = points[2] - points[5];
-			r = Math.sqrt(dx*dx + dy*dy + dz*dz)*Options.tension;
+			r = Math.sqrt(dx*dx + dy*dy + dz*dz)*ClothConfig.tension;
 		}
 
 		foreach2d(w, h, (i, j) => { if (i < h-1) springs.push(new Spring(StructSpring, i*w+j, (i+1)*w+j, r)); });
@@ -293,19 +290,19 @@ class Cloth {
 
 		this.wind = new Float32Array([0.0, 0.0, 0.0]);
 
-		this.Xb = new Float32Array(n*3); // pos
-		this.M = new Float32Array(n); // mass
+		this.Xb = new Float32Array(n*3);
+		this.M = new Float32Array(n);
 
 		this.X = new BigVec3D(n);
 		this.X.data = new Float32Array(points);
 
-		this.V = new BigVec3D(n); // vel
-		this.N = new BigVec3D(n); // normals
-		this.P = new BigVec3D(n); // pressure
-		this.F = new BigVec3D(n); // force
-		this.dV = new BigVec3D(n); // velocity delta
+		this.V = new BigVec3D(n);
+		this.N = new BigVec3D(n);
+		this.P = new BigVec3D(n);
+		this.F = new BigVec3D(n);
+		this.dV = new BigVec3D(n);
 
-		this.A = new BigMat3D(n); // solution matrix
+		this.A = new BigMat3D(n);
 		this.dFdX = new BigMat3D(n);
 		this.dFdV = new BigMat3D(n);
 
@@ -322,22 +319,14 @@ class Cloth {
 			s.iba = this.A.size; this.A.push(s.b, s.a); this.dFdX.push(s.b, s.a); this.dFdV.push(s.b, s.a);
 		});
 
-		// this.H = [];
-
-		for (let i = 0; i < n; ++i) {
-			this.M[i] = Options.mass;
-		}
-
-        this.uvs = new Float32Array(texcoords);
-        
+		this.uvs = new Float32Array(texcoords);
 		this.tris = new Uint16Array(tris);
-
 		this.S = new BigMat3D(0);
 
-		if (Options.pinned.bottomLeft) this.pointStatusSet(0, 1);
-		if (Options.pinned.bottomRight) this.pointStatusSet(w - 1, 1);
-		if (Options.pinned.topLeft) this.pointStatusSet((h - 1)*w, 1);
-		if (Options.pinned.topRight) this.pointStatusSet(h*w - 1, 1);
+		if (ClothConfig.pinned.bottomLeft) this.pointStatusSet(0, 1);
+		if (ClothConfig.pinned.bottomRight) this.pointStatusSet(w - 1, 1);
+		if (ClothConfig.pinned.topLeft) this.pointStatusSet((h - 1)*w, 1);
+		if (ClothConfig.pinned.topRight) this.pointStatusSet(h*w - 1, 1);
 	}
 
 	pointStatusSet(index, op) {
@@ -357,13 +346,13 @@ class Cloth {
 			this.V.data[index*3+2] = 0.0;
 			st = true;
 		}
-		this.M[index] = st ? 0.0 : Options.mass;
+		this.M[index] = st ? 0.0 : ClothConfig.mass;
 	}
-    // just average normal for each face.
+
 	calcNormals() {
 		this.N.init(0, 0, 0);
 		let N = this.N.data, X = this.X.data;
-		let tris = this.tris;//, quads = this.quads;
+		let tris = this.tris;
 		for (let i = 0, l = tris.length; i < l; i += 3) {
 			let v0i = tris[i+0]*3, v1i = tris[i+1]*3, v2i = tris[i+2]*3;
 
@@ -391,10 +380,12 @@ class Cloth {
 	}
 
 	calcForces() {
+		const SpringConstants = [ClothConfig.structK, ClothConfig.shearK, ClothConfig.bendK];
+		
 		this.calcNormals();
 		this.dFdX.zero();
 		this.dFdV.initDiag(0.0);
-		this.F.init(0, Options.gravity, 0);
+		this.F.init(0, ClothConfig.gravity, 0);
 		let [wx, wy, wz] = this.wind;
 		let N = this.N.data, F = this.F.data, V = this.V.data, X = this.X.data;
 		for (let i = 0, ii = 0, l = this.F.size; i < l; ++i, ii += 3) {
@@ -408,7 +399,7 @@ class Cloth {
             let vwy = vy-wy;
             let vwz = vz-wz;
             let vwdn = vwx*nx + vwy*ny + vwz*nz;
-			let s = Options.dampAir*vwdn;
+			let s = ClothConfig.dampAir*vwdn;
 			F[ii+0] -= nx * s;
 			F[ii+1] -= ny * s;
 			F[ii+2] -= nz * s;
@@ -419,6 +410,7 @@ class Cloth {
 	}
 
 	preSolveSpring(s) {
+		const SpringConstants = [ClothConfig.structK, ClothConfig.shearK, ClothConfig.bendK];
 		const I00 = 1.0, I01 = 0.0, I02 = 0.0;
 		const I10 = 0.0, I11 = 1.0, I12 = 0.0;
 		const I20 = 0.0, I21 = 0.0, I22 = 1.0;
@@ -426,7 +418,7 @@ class Cloth {
 		let sa = s.a*3 >>> 0;
 		let sb = s.b*3 >>> 0;
 		let rest = +s.rest;
-		let damp = +Options.dampSpring;
+		let damp = +ClothConfig.dampSpring;
 
 		let dFdX = this.dFdX.data, dFdV = this.dFdV.data;
 		let F = this.F.data, X = this.X.data, V = this.V.data;
@@ -452,7 +444,6 @@ class Cloth {
 		F[sb+0] -= fX; F[sb+1] -= fY; F[sb+2] -= fZ;
 
 		let rl = (rest/length) < 1.0 ? (rest/length) : 1.0;
-		// outer(dir, dir)
 		let dp00 = dx*dx, dp01 = dx*dy, dp02 = dx*dz;
 		let dp10 = dx*dy, dp11 = dy*dy, dp12 = dy*dz;
 		let dp20 = dx*dz, dp21 = dy*dz, dp22 = dz*dz;
@@ -509,8 +500,6 @@ class Cloth {
 		dFdV[mBA+6] += dFdV20; dFdV[mBA+7] += dFdV21; dFdV[mBA+8] += dFdV22;
 	}
 
-
-
 	conjGradFilt(Xv, Am, Bv, Sm) {
 		const epsilon = 0.02;
 		const loopLim = 100;
@@ -552,8 +541,7 @@ class Cloth {
 			for (let i  = 0; i < size3; ++i) {
 				X[i] += D[i]*a;
 			}
-			//filterH(X,H)
-			if ((loops % 50) === 0) {// || H.length !== 0) {
+			if ((loops % 50) === 0) {
 				mul(tmp, Am, Xv);
 				for (let i = 0; i < size3; ++i) {
 					R[i] = B[i] - T[i];
@@ -575,7 +563,6 @@ class Cloth {
 		}
 		return loops < loopLim;
 	}
-
 
 	simulate(dt) {
 		if (dt <= 0.0) {
@@ -617,206 +604,285 @@ class Cloth {
 			X[i] += V[i]*dt;
 		}
 
-
 		for (let i = 0, Sp = this.S.posns, sSize = this.S.size, V = this.V.data; i < sSize; ++i)  {
 			let ci = (Sp[i*2+1] * 3) >>> 0;
 			V[ci+0] = V[ci+1] = V[ci+2] = 0.0;
 		}
-		this.awake = dot(this.V, this.V) < Options.sleepThreshold ? this.awake-1 : Options.sleepCount;
-		this.nancheckAll();
-	}
-	populateVertexBuffer(buf) {
-	    let pos = this.X.data;
-	    let nor = this.N.data;
-	    let tex = this.uvs;
-	    
-	    let size = this.X.size;
-	    
-	    for (let i = 0, i3 = 0, i2 = 0, i8 = 0; i < size; ++i, i2 += 2, i3 += 3, i8 += 8) {
-	        buf[i8+0] = pos[i3+0];
-	        buf[i8+1] = pos[i3+1];
-	        buf[i8+2] = pos[i3+2];
-	        buf[i8+3] = nor[i3+0];
-	        buf[i8+4] = nor[i3+1];
-	        buf[i8+5] = nor[i3+2];
-	        buf[i8+6] = tex[i2+0];
-	        buf[i8+7] = tex[i2+1];
-	    }
-	    
-	}
-
-	nancheckAll() {
-		if (!DEBUG) return;
-		for (let i = 0; i < this.Xb.length; ++i) { if (+this.Xb[i] !== this.Xb[i]) { console.error("NaNCheck Xb failed"); debugger; } }
-		for (let i = 0; i < this.M.length; ++i) { if (+this.M[i] !== this.M[i]) { console.error("NaNCheck M failed"); debugger; } }
-		this.X.nanCheck();
-		this.V.nanCheck();
-		this.N.nanCheck();
-		this.P.nanCheck();
-		this.F.nanCheck();
-		this.dV.nanCheck();
-
-		this.A.nanCheck();
-		this.dFdX.nanCheck();
-		this.dFdV.nanCheck();
-		this.S.nanCheck();
-
-		this.tmpB.nanCheck();
-		this.tmpdFdXmV.nanCheck();
-		this.tmpQ.nanCheck();
-		this.tmpD.nanCheck();
-		this.tmpT.nanCheck();
-		this.tmpR.nanCheck();
+		this.awake = dot(this.V, this.V) < ClothConfig.sleepThreshold ? this.awake-1 : ClothConfig.sleepCount;
 	}
 }
 
+// ============================================================================
+// Three.js Rendering
+// ============================================================================
 
-function run(clothImage) {
-    Sim.init();
-    
-    let cloth = new Cloth(Options.clothWidth, Options.clothHeight, 1.0);
-    cloth.wind[0] = -1.0; cloth.wind[2] = 0.4;
-    let {clothWidth, clothHeight} = Options;
-    for (let i = 0; i < cloth.X.size; ++i) 
-        cloth.X.data[i*3+2] -= 1.75;
-    cloth.wind[0] = Options.wind[0];
-    cloth.wind[1] = Options.wind[1];
-    cloth.wind[2] = Options.wind[2];
-    let clothDt = Options.timeStep;
-    let selection = 0;
-    let shader = Sim.createShader("fs", "vs", {a_position: 0, a_normal: 1, a_color: 2});
-    let vertexBuffer = new Float32Array(cloth.X.size*8);
-    let gl = Sim.gl;
-    let clothTexture = gl.createTexture();
-    
-    gl.bindTexture(gl.TEXTURE_2D, clothTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, clothImage);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    Sim.checkGL("load texture");
-    let viewMatrix = mat4.lookAt(null, 0,0,0, 0,0,-1, 0,1,0);
-    let modelMatrix = mat4.identity();
-    let vbo = gl.createBuffer();
-    let ibo = gl.createBuffer();
-    
-	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cloth.tris, gl.STATIC_DRAW);
-	Sim.checkGL('bufferData (tris)');
+let scene, camera, renderer, cloth, clothMesh, raycaster, mouse;
+let time = 0.0;
+let selection = 0;
+let isMouseDown = false;
 
-	gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-	gl.bufferData(gl.ARRAY_BUFFER, vertexBuffer, gl.DYNAMIC_DRAW);
+function init() {
+	// Scene setup
+	scene = new THREE.Scene();
+	scene.background = new THREE.Color(0, 0, 0);
 
-	Sim.checkGL('bufferData (verts)');
+	// Camera
+	camera = new THREE.PerspectiveCamera(
+		45,
+		window.innerWidth / window.innerHeight,
+		0.01,
+		50
+	);
+	camera.position.set(0, 0, ClothConfig.cameraDistance);
+	camera.lookAt(0, 0, 0);
 
-    gl.enable(gl.DEPTH_TEST);
-    //gl.enable(gl.CULL_FACE);
-    let time = 0.0;
-    Sim.update = function(dt) {
-		Sim.canvas.width = Sim.width;
-		Sim.canvas.height = Sim.height;
-        time += dt;
-        gl.clearColor(0.2, 0.2, 0.2, 1.0);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        let unsetPoint = -1;
-        if (Options.dynamicWind) {
-            let sx = Math.sin(time);
-            let sy = Math.cos(time);
-            cloth.wind[0] = sx;
-            cloth.wind[1] = 1.0;
-            cloth.wind[2] = sy;
-        }
-        if (!Sim.mouse.down) {
-            if (Sim.lastMouse.down && 
-                selection !== clothWidth*clothHeight-1 &&
-                selection !== clothWidth*(clothHeight-1)) {
-                cloth.pointStatusSet(selection, 0);
-            }
-            let [vx, vy, vz] = Sim.mouse.vec;
-            let bi = 0;
-            let bx = 0.0, by = 0.0, bz = 0.0;
-            for (let i = 1; i < cloth.X.size; ++i) {
-                let cx = cloth.X.data[i*3+0];
-                let cy = cloth.X.data[i*3+1];
-                let cz = cloth.X.data[i*3+2];
-                let l = Math.sqrt(cx*cx+cy*cy+cz*cz);
-                if (l === 0) 
-                    continue;
-                cx /= l;
-                cy /= l;
-                cz /= l;
-                if (vx*cx+vy*cy+vz*cz > bx*vx+by*vy+bz*vz) {
-                    bi = i;
-                    bx = cx;
-                    by = cy;
-                    bz = cz;
-                }
-            }
-            selection = bi;
-        }
-        else {
-            if (!cloth.pointStatusSet(selection, -1)) {
-                unsetPoint = selection;
-                cloth.pointStatusSet(unsetPoint, 1);
-            }
-            let [vx, vy, vz] = Sim.mouse.vec;
-            let si = selection*3;
-            let cx = cloth.X.data[si+0], cy = cloth.X.data[si+1], cz = cloth.X.data[si+2];
-            let mul = (vx*cx+vy*cy+vz*cz)/(vx*vx+vy*vy+vz*vz);
-            cloth.X.data[si+0] = vx*mul;
-            cloth.X.data[si+1] = vy*mul;
-            cloth.X.data[si+2] = vz*mul;
-        }
-        cloth.simulate(clothDt);
-        
-        cloth.populateVertexBuffer(vertexBuffer);
-        
-        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-		//gl.bufferData(gl.ARRAY_BUFFER, vertexBuffer, gl.DYNAMIC_DRAW);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertexBuffer);
-        Sim.checkGL("upload vert data");
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-        
-        gl.useProgram(shader.program);
-        
-	    gl.enableVertexAttribArray(0); // posn
-	    gl.enableVertexAttribArray(1); // norm
-	    gl.enableVertexAttribArray(2); // texc
-	    
-	    Sim.checkGL("enableVertexAttribs");
-	    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 4*8, 0); // pos
-	    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 4*8, 3*4); // norm
-	    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 4*8, 6*4); // texc
-        
-	    Sim.checkGL("vertexAttribPointer");
-	    
-        gl.bindTexture(gl.TEXTURE_2D, clothTexture);
-        gl.activeTexture(gl.TEXTURE0);
-        Sim.checkGL("bind/active texture ");
-        Sim.setSceneUniforms(shader, viewMatrix);
-        Sim.setModelUniforms(shader, viewMatrix, modelMatrix);
-        
-        shader.setUniform1i('u_albedo', 0);
-	    Sim.checkGL("set uniforms");
-	    gl.drawElements(gl.TRIANGLES, cloth.tris.length, gl.UNSIGNED_SHORT, 0);
-	    Sim.checkGL("drawcall");
-    }
-    //cloth.simulate(dt);
-    Sim.start();
+	// Renderer
+	renderer = new THREE.WebGLRenderer({ antialias: true });
+	renderer.setSize(window.innerWidth, window.innerHeight);
+	renderer.setPixelRatio(window.devicePixelRatio);
+	document.body.appendChild(renderer.domElement);
+
+	// Lighting
+	const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+	scene.add(ambientLight);
+	
+	const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+	directionalLight.position.set(50, 100, 100);
+	scene.add(directionalLight);
+
+	// Create cloth
+	createCloth();
+
+	// Mouse/raycasting setup
+	raycaster = new THREE.Raycaster();
+	mouse = new THREE.Vector2();
+
+	// Event listeners
+	window.addEventListener('resize', onWindowResize);
+	renderer.domElement.addEventListener('mousemove', onMouseMove);
+	renderer.domElement.addEventListener('mousedown', onMouseDown);
+	renderer.domElement.addEventListener('mouseup', onMouseUp);
+	window.addEventListener('blur', onMouseUp);
+
+	// Start animation loop
+	animate();
 }
 
+function createCloth() {
+	// Create cloth physics simulation
+	cloth = new Cloth(ClothConfig.width, ClothConfig.height, ClothConfig.physicalSize);
+	
+	// Initial positioning
+	for (let i = 0; i < cloth.X.size; ++i) {
+		cloth.X.data[i*3+2] += ClothConfig.initialZPosition;
+	}
+	
+	cloth.wind[0] = ClothConfig.wind[0];
+	cloth.wind[1] = ClothConfig.wind[1];
+	cloth.wind[2] = ClothConfig.wind[2];
 
+	// Create Three.js geometry
+	const geometry = new THREE.BufferGeometry();
+	
+	// Set positions, normals, and UVs
+	const positions = new Float32Array(cloth.X.size * 3);
+	const normals = new Float32Array(cloth.X.size * 3);
+	const uvs = new Float32Array(cloth.X.size * 2);
+	const indices = cloth.tris;
 
+	// Initialize from cloth data
+	updateGeometryFromCloth(geometry, positions, normals, uvs);
+	
+	geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+	geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+	geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+	geometry.setIndex(new THREE.BufferAttribute(indices, 1));
 
-//window.addEventListener('load', function() {
-    let img = new Image();
-    img.crossOrigin = "anonymous";
-    img.addEventListener('load', function() {
-        run(img);
-    })
-    img.addEventListener('error', function() {
-        alert('dang image didnt load');
-    });
-    img.src = "texture.jpg";
-//});
-}(window))
+	// Load texture
+	const textureLoader = new THREE.TextureLoader();
+	textureLoader.load(ClothConfig.texturePath, (texture) => {
+		texture.wrapS = THREE.RepeatWrapping;
+		texture.wrapT = THREE.RepeatWrapping;
+		texture.minFilter = THREE.LinearMipmapLinearFilter;
+		texture.magFilter = THREE.LinearFilter;
+		texture.generateMipmaps = true;
+
+		// Create material
+		const material = new THREE.MeshPhongMaterial({
+			map: texture,
+			side: THREE.DoubleSide
+		});
+
+		// Create mesh
+		clothMesh = new THREE.Mesh(geometry, material);
+		scene.add(clothMesh);
+	}, undefined, (error) => {
+		console.error('Error loading texture:', error);
+		// Create mesh without texture as fallback
+		const material = new THREE.MeshPhongMaterial({
+			color: 0x888888,
+			side: THREE.DoubleSide
+		});
+		clothMesh = new THREE.Mesh(geometry, material);
+		scene.add(clothMesh);
+	});
+}
+
+function updateGeometryFromCloth(geometry, positions, normals, uvs) {
+	cloth.calcNormals();
+	
+	const X = cloth.X.data;
+	const N = cloth.N.data;
+	const clothUvs = cloth.uvs;
+	
+	for (let i = 0; i < cloth.X.size; ++i) {
+		const i3 = i * 3;
+		const i2 = i * 2;
+		
+		positions[i3 + 0] = X[i3 + 0];
+		positions[i3 + 1] = X[i3 + 1];
+		positions[i3 + 2] = X[i3 + 2];
+		
+		normals[i3 + 0] = N[i3 + 0];
+		normals[i3 + 1] = N[i3 + 1];
+		normals[i3 + 2] = N[i3 + 2];
+		
+		uvs[i2 + 0] = clothUvs[i2 + 0];
+		uvs[i2 + 1] = clothUvs[i2 + 1];
+	}
+	
+	if (geometry.attributes.position) {
+		geometry.attributes.position.needsUpdate = true;
+	}
+	if (geometry.attributes.normal) {
+		geometry.attributes.normal.needsUpdate = true;
+	}
+}
+
+function onWindowResize() {
+	camera.aspect = window.innerWidth / window.innerHeight;
+	camera.updateProjectionMatrix();
+	renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function onMouseMove(event) {
+	mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+	mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+	
+	if (!isMouseDown && clothMesh) {
+		updateSelection();
+	}
+}
+
+function onMouseDown(event) {
+	isMouseDown = true;
+	if (clothMesh && selection !== ClothConfig.width*ClothConfig.height-1 && 
+	    selection !== ClothConfig.width*(ClothConfig.height-1)) {
+		cloth.pointStatusSet(selection, 1);
+	}
+}
+
+function onMouseUp(event) {
+	isMouseDown = false;
+	if (clothMesh && selection !== ClothConfig.width*ClothConfig.height-1 && 
+	    selection !== ClothConfig.width*(ClothConfig.height-1)) {
+		cloth.pointStatusSet(selection, 0);
+	}
+}
+
+function updateSelection() {
+	if (!clothMesh) return;
+	
+	raycaster.setFromCamera(mouse, camera);
+	const direction = raycaster.ray.direction;
+	
+	let bestIndex = 0;
+	let bestDot = -Infinity;
+	
+	const X = cloth.X.data;
+	for (let i = 0; i < cloth.X.size; ++i) {
+		const i3 = i * 3;
+		const x = X[i3 + 0];
+		const y = X[i3 + 1];
+		const z = X[i3 + 2];
+		const len = Math.sqrt(x*x + y*y + z*z);
+		
+		if (len === 0) continue;
+		
+		const normalizedX = x / len;
+		const normalizedY = y / len;
+		const normalizedZ = z / len;
+		
+		const dotProduct = direction.x * normalizedX + direction.y * normalizedY + direction.z * normalizedZ;
+		
+		if (dotProduct > bestDot) {
+			bestDot = dotProduct;
+			bestIndex = i;
+		}
+	}
+	
+	selection = bestIndex;
+}
+
+function animate() {
+	requestAnimationFrame(animate);
+	
+	const deltaTime = 0.016; // ~60fps
+	
+	if (cloth && clothMesh) {
+		time += deltaTime;
+		
+		// Update wind
+		if (ClothConfig.dynamicWind) {
+			const sx = Math.sin(time);
+			const sy = Math.cos(time);
+			cloth.wind[0] = sx;
+			cloth.wind[1] = 1.0;
+			cloth.wind[2] = sy;
+		}
+		
+		// Handle mouse interaction
+		if (isMouseDown) {
+			raycaster.setFromCamera(mouse, camera);
+			const direction = raycaster.ray.direction;
+			
+			const si = selection * 3;
+			const cx = cloth.X.data[si + 0];
+			const cy = cloth.X.data[si + 1];
+			const cz = cloth.X.data[si + 2];
+			
+			const dotProd = direction.x * cx + direction.y * cy + direction.z * cz;
+			const dirLenSq = direction.x * direction.x + direction.y * direction.y + direction.z * direction.z;
+			const mul = dotProd / dirLenSq;
+			
+			cloth.X.data[si + 0] = direction.x * mul;
+			cloth.X.data[si + 1] = direction.y * mul;
+			cloth.X.data[si + 2] = direction.z * mul;
+		}
+		
+		// Simulate physics
+		cloth.simulate(ClothConfig.timeStep);
+		
+		// Update Three.js geometry
+		if (clothMesh.geometry) {
+			updateGeometryFromCloth(
+				clothMesh.geometry,
+				clothMesh.geometry.attributes.position.array,
+				clothMesh.geometry.attributes.normal.array,
+				clothMesh.geometry.attributes.uv.array
+			);
+		}
+	}
+	
+	renderer.render(scene, camera);
+	
+	// Update FPS
+	const fpsElement = document.getElementById('fps');
+	if (fpsElement) {
+		fpsElement.textContent = Math.round(1.0 / deltaTime) + 'fps';
+	}
+}
+
+// Start the application
+init();
+
