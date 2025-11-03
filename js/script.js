@@ -6,10 +6,13 @@
 //
 // Original WebGL implementation converted to Three.js
 // for easier texture and size customization
+import * as THREE from 'three';
+
 
 // ============================================================================
 // CONFIGURATION - Easy to modify!
 // ============================================================================
+
 const ClothConfig = {
 	// Cloth dimensions (number of grid points)
 	width: 32,  // Increase for finer detail
@@ -19,7 +22,7 @@ const ClothConfig = {
 	physicalSize: 2.0, // meters (or arbitrary units)
 	
 	// Texture settings
-	texturePath: 'texture2.jpg', // Path to your texture image
+	texturePath: '/images/texture2.jpg', // Path to your texture image
 	
 	// Physics parameters
 	gravity: -9.8,
@@ -875,12 +878,7 @@ function animate() {
 	}
 	
 	renderer.render(scene, camera);
-	
-	// Update FPS
-	const fpsElement = document.getElementById('fps');
-	if (fpsElement) {
-		fpsElement.textContent = Math.round(1.0 / deltaTime) + 'fps';
-	}
+
 }
 
 // Start the application
