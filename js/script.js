@@ -619,47 +619,65 @@ class Cloth {
 // Three.js Rendering
 // ============================================================================
 
+// Three.js core objects:
+// - scene: The 3D world container that holds all objects
+// - camera: Defines the viewpoint from which we look at the scene
+// - renderer: Draws the scene from the camera's perspective onto the canvas
+// - clothMesh: The Three.js mesh object that visually represents our cloth
+// - raycaster: Used to convert mouse/touch coordinates into 3D space
 let scene, camera, renderer, cloth, clothMesh, raycaster, mouse;
-let time = 0.0;
-let selection = 0;
-let isMouseDown = false;
-let isTouchActive = false;
+let time = 0.0; // Global time counter for animations
+let selection = 0; // Index of the cloth point currently selected
+let isMouseDown = false; // Track if mouse button is pressed
+let isTouchActive = false; // Track if touch interaction is active
 
 function init() {
-	// Scene setup
+	// ========================================================================
+	// THREE.JS INITIALIZATION
+	// ========================================================================
+	
+	// Create the scene - this is the 3D container that holds all objects
 	scene = new THREE.Scene();
-	scene.background = new THREE.Color(0, 0, 0);
+	scene.background = new THREE.Color(0, 0, 0); // Black background
 
-	// Camera
+	// Create a perspective camera (like a human eye - objects further away appear smaller)
+	// Parameters: field of view (degrees), aspect ratio, near plane, far plane
 	camera = new THREE.PerspectiveCamera(
-		45,
-		window.innerWidth / window.innerHeight,
-		0.01,
-		50
+		45, // Field of view (how wide the camera sees)
+		window.innerWidth / window.innerHeight, // Aspect ratio (width/height)
+		0.01, // Near clipping plane (objects closer than this are not rendered)
+		50   // Far clipping plane (objects further than this are not rendered)
 	);
+	// Position the camera at a distance from the origin (0,0,0)
 	camera.position.set(0, 0, ClothConfig.cameraDistance);
+	// Make the camera look at the center of the scene
 	camera.lookAt(0, 0, 0);
 
-	// Renderer
-	renderer = new THREE.WebGLRenderer({ antialias: true });
+	// Create the WebGL renderer - this actually draws everything on screen
+	renderer = new THREE.WebGLRenderer({ antialias: true }); // antialias smooths edges
 	renderer.setSize(window.innerWidth, window.innerHeight);
-	renderer.setPixelRatio(window.devicePixelRatio);
+	renderer.setPixelRatio(window.devicePixelRatio); // For high-DPI displays
+	// Append the renderer's canvas element to the page so we can see it
 	document.body.appendChild(renderer.domElement);
 
-	// Lighting
+	// Add lighting to the scene (without lights, objects would be pitch black)
+	// Ambient light: soft overall illumination (like daylight in a room)
 	const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
 	scene.add(ambientLight);
 	
+	// Directional light: light coming from a specific direction (like sunlight)
 	const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-	directionalLight.position.set(50, 100, 100);
+	directionalLight.position.set(50, 100, 100); // Position where the light comes from
 	scene.add(directionalLight);
 
-	// Create cloth
+	// Create the cloth simulation and visual representation
 	createCloth();
 
-	// Mouse/raycasting setup
+	// Raycasting is used to convert 2D mouse/touch coordinates into 3D space
+	// Think of it as shooting a ray from the camera through the mouse position
+	// and seeing what it hits in 3D space
 	raycaster = new THREE.Raycaster();
-	mouse = new THREE.Vector2();
+	mouse = new THREE.Vector2(); // Stores normalized mouse coordinates (-1 to 1)
 
 	// Event listeners
 	window.addEventListener('resize', onWindowResize);
@@ -682,53 +700,77 @@ function init() {
 }
 
 function createCloth() {
-	// Create cloth physics simulation
+	// ========================================================================
+	// CLOTH PHYSICS SETUP
+	// ========================================================================
+	
+	// Create the physics simulation - this handles all the cloth physics calculations
+	// The Cloth class manages positions, velocities, springs, etc.
 	cloth = new Cloth(ClothConfig.width, ClothConfig.height, ClothConfig.physicalSize);
 	
-	// Initial positioning
+	// Move the cloth back in the Z direction so it's visible in front of the camera
 	for (let i = 0; i < cloth.X.size; ++i) {
 		cloth.X.data[i*3+2] += ClothConfig.initialZPosition;
 	}
 	
+	// Set initial wind values
 	cloth.wind[0] = ClothConfig.wind[0];
 	cloth.wind[1] = ClothConfig.wind[1];
 	cloth.wind[2] = ClothConfig.wind[2];
 
-	// Create Three.js geometry
+	// ========================================================================
+	// THREE.JS GEOMETRY SETUP
+	// ========================================================================
+	
+	// BufferGeometry is Three.js's efficient way to store mesh data
+	// It uses typed arrays (Float32Array) for performance
 	const geometry = new THREE.BufferGeometry();
 	
-	// Set positions, normals, and UVs
+	// Prepare arrays to store the geometry data:
+	// - positions: X, Y, Z coordinates of each vertex (3 values per vertex)
+	// - normals: Direction each vertex faces (for lighting calculations, 3 values per vertex)
+	// - uvs: Texture coordinates (where on the texture image each vertex maps to, 2 values per vertex)
 	const positions = new Float32Array(cloth.X.size * 3);
 	const normals = new Float32Array(cloth.X.size * 3);
 	const uvs = new Float32Array(cloth.X.size * 2);
-	const indices = cloth.tris;
+	const indices = cloth.tris; // Indices define which vertices form triangles
 
-	// Initialize from cloth data
+	// Initialize geometry arrays with data from the cloth simulation
 	updateGeometryFromCloth(geometry, positions, normals, uvs);
 	
-	geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-	geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-	geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-	geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+	// Attach the data arrays to the geometry as "attributes"
+	// The number (3, 3, 2, 1) indicates how many values per vertex
+	geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3)); // 3 values: x, y, z
+	geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3)); // 3 values: nx, ny, nz
+	geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2)); // 2 values: u, v (texture coordinates)
+	geometry.setIndex(new THREE.BufferAttribute(indices, 1)); // Triangle indices
 
-	// Load texture
+	// ========================================================================
+	// TEXTURE AND MATERIAL SETUP
+	// ========================================================================
+	
+	// Load the texture image that will be displayed on the cloth
 	const textureLoader = new THREE.TextureLoader();
 	textureLoader.load(ClothConfig.texturePath, (texture) => {
-		texture.wrapS = THREE.RepeatWrapping;
-		texture.wrapT = THREE.RepeatWrapping;
-		texture.minFilter = THREE.LinearMipmapLinearFilter;
-		texture.magFilter = THREE.LinearFilter;
-		texture.generateMipmaps = true;
+		// Configure texture wrapping (what happens when UV coordinates exceed 0-1)
+		texture.wrapS = THREE.RepeatWrapping; // Repeat horizontally
+		texture.wrapT = THREE.RepeatWrapping; // Repeat vertically
+		// Filtering determines how the texture looks when scaled
+		texture.minFilter = THREE.LinearMipmapLinearFilter; // When texture is smaller (smooth)
+		texture.magFilter = THREE.LinearFilter; // When texture is larger (smooth)
+		texture.generateMipmaps = true; // Generate smaller versions for performance
 
-		// Create material
+		// Material defines how the surface looks (color, shininess, texture, etc.)
+		// MeshPhongMaterial responds to lights and creates highlights
 		const material = new THREE.MeshPhongMaterial({
-			map: texture,
-			side: THREE.DoubleSide
+			map: texture, // Apply the loaded texture
+			side: THREE.DoubleSide // Render both sides (front and back) of each triangle
 		});
 
-		// Create mesh
+		// Mesh = Geometry + Material
+		// This is the actual 3D object we can see in the scene
 		clothMesh = new THREE.Mesh(geometry, material);
-		scene.add(clothMesh);
+		scene.add(clothMesh); // Add it to the scene so it gets rendered
 	}, undefined, (error) => {
 		console.error('Error loading texture:', error);
 		// Create mesh without texture as fallback
@@ -741,29 +783,39 @@ function createCloth() {
 	});
 }
 
+// Sync the Three.js geometry with the physics simulation data
+// This updates the visual mesh to match where the cloth points actually are
 function updateGeometryFromCloth(geometry, positions, normals, uvs) {
+	// Calculate surface normals (which way each vertex faces)
+	// Normals are needed for lighting calculations
 	cloth.calcNormals();
 	
-	const X = cloth.X.data;
-	const N = cloth.N.data;
-	const clothUvs = cloth.uvs;
+	const X = cloth.X.data; // Physics positions (x, y, z for each point)
+	const N = cloth.N.data; // Physics normals (calculated surface directions)
+	const clothUvs = cloth.uvs; // Texture coordinates (unchanged)
 	
+	// Copy physics data into Three.js geometry arrays
 	for (let i = 0; i < cloth.X.size; ++i) {
-		const i3 = i * 3;
-		const i2 = i * 2;
+		const i3 = i * 3; // Index for 3D data (x, y, z)
+		const i2 = i * 2; // Index for 2D data (u, v)
 		
+		// Copy positions from physics simulation
 		positions[i3 + 0] = X[i3 + 0];
 		positions[i3 + 1] = X[i3 + 1];
 		positions[i3 + 2] = X[i3 + 2];
 		
+		// Copy normals for lighting
 		normals[i3 + 0] = N[i3 + 0];
 		normals[i3 + 1] = N[i3 + 1];
 		normals[i3 + 2] = N[i3 + 2];
 		
+		// Copy texture coordinates (these don't change)
 		uvs[i2 + 0] = clothUvs[i2 + 0];
 		uvs[i2 + 1] = clothUvs[i2 + 1];
 	}
 	
+	// Tell Three.js that the geometry data has changed and needs to be re-uploaded to GPU
+	// This is important for performance - we only update when needed
 	if (geometry.attributes.position) {
 		geometry.attributes.position.needsUpdate = true;
 	}
@@ -778,8 +830,12 @@ function onWindowResize() {
 	renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
+// Convert screen coordinates (0 to window width/height) to normalized coordinates (-1 to 1)
+// This is the coordinate system Three.js uses for mouse/touch input
 function updateMousePosition(clientX, clientY) {
+	// Convert X: 0 (left) to 1 (right) to -1 (left) to 1 (right)
 	mouse.x = (clientX / window.innerWidth) * 2 - 1;
+	// Convert Y: 0 (top) to 1 (bottom) to 1 (top) to -1 (bottom) - Y is inverted
 	mouse.y = -(clientY / window.innerHeight) * 2 + 1;
 }
 
@@ -855,49 +911,63 @@ function onTouchEnd(event) {
 	}
 }
 
+// Find which cloth point is closest to where the mouse/touch is pointing
 function updateSelection() {
 	if (!clothMesh) return;
 	
+	// Cast a ray from the camera through the mouse position into 3D space
 	raycaster.setFromCamera(mouse, camera);
-	const direction = raycaster.ray.direction;
+	const direction = raycaster.ray.direction; // Direction the ray is pointing
 	
+	// Find the cloth point that is most aligned with the ray direction
+	// We do this by checking which point's direction from origin best matches the ray direction
 	let bestIndex = 0;
-	let bestDot = -Infinity;
+	let bestDot = -Infinity; // Dot product measures alignment (1 = same direction, -1 = opposite)
 	
 	const X = cloth.X.data;
 	for (let i = 0; i < cloth.X.size; ++i) {
 		const i3 = i * 3;
+		// Get the 3D position of this cloth point
 		const x = X[i3 + 0];
 		const y = X[i3 + 1];
 		const z = X[i3 + 2];
 		const len = Math.sqrt(x*x + y*y + z*z);
 		
-		if (len === 0) continue;
+		if (len === 0) continue; // Skip if point is at origin
 		
+		// Normalize the point's position to get its direction from origin
 		const normalizedX = x / len;
 		const normalizedY = y / len;
 		const normalizedZ = z / len;
 		
+		// Dot product: higher values mean the ray and point direction are more aligned
 		const dotProduct = direction.x * normalizedX + direction.y * normalizedY + direction.z * normalizedZ;
 		
+		// Keep track of the best match
 		if (dotProduct > bestDot) {
 			bestDot = dotProduct;
 			bestIndex = i;
 		}
 	}
 	
-	selection = bestIndex;
+	selection = bestIndex; // Store the selected point index
 }
 
+// ========================================================================
+// ANIMATION LOOP
+// ========================================================================
+// This function runs continuously (typically 60 times per second)
+// It's the heartbeat of the application - updates physics and renders frames
 function animate() {
+	// Schedule the next frame - this creates a loop
 	requestAnimationFrame(animate);
 	
-	const deltaTime = 0.016; // ~60fps
+	const deltaTime = 0.016; // ~60fps (1/60 seconds per frame)
 	
 	if (cloth && clothMesh) {
-		time += deltaTime;
+		time += deltaTime; // Accumulate time for animations
 		
-		// Update wind
+		// Update wind force if dynamic wind is enabled
 		if (ClothConfig.dynamicWind) {
 			const sx = Math.sin(time);
 			const sy = Math.cos(time);
@@ -906,29 +976,42 @@ function animate() {
 			cloth.wind[2] = sy;
 		}
 		
-		// Handle mouse/touch interaction
+		// Handle mouse/touch interaction - move the selected cloth point
 		if (isMouseDown || isTouchActive) {
+			// Get the ray direction from camera through mouse position
 			raycaster.setFromCamera(mouse, camera);
 			const direction = raycaster.ray.direction;
 			
+			// Get the currently selected cloth point's position
 			const si = selection * 3;
 			const cx = cloth.X.data[si + 0];
 			const cy = cloth.X.data[si + 1];
 			const cz = cloth.X.data[si + 2];
 			
+			// Project the cloth point onto the ray to find where it should be
+			// This makes the point follow the mouse/finger in 3D space
 			const dotProd = direction.x * cx + direction.y * cy + direction.z * cz;
 			const dirLenSq = direction.x * direction.x + direction.y * direction.y + direction.z * direction.z;
 			const mul = dotProd / dirLenSq;
 			
+			// Update the cloth point position
 			cloth.X.data[si + 0] = direction.x * mul;
 			cloth.X.data[si + 1] = direction.y * mul;
 			cloth.X.data[si + 2] = direction.z * mul;
 		}
 		
-		// Simulate physics
+		// ====================================================================
+		// PHYSICS UPDATE
+		// ====================================================================
+		// Run one step of the physics simulation
+		// This calculates forces, spring tensions, gravity, etc. and updates positions
 		cloth.simulate(ClothConfig.timeStep);
 		
-		// Update Three.js geometry
+		// ====================================================================
+		// VISUAL UPDATE
+		// ====================================================================
+		// Copy the updated physics data into the Three.js geometry
+		// This makes the visual mesh match the physics simulation
 		if (clothMesh.geometry) {
 			updateGeometryFromCloth(
 				clothMesh.geometry,
@@ -939,6 +1022,11 @@ function animate() {
 		}
 	}
 	
+	// ========================================================================
+	// RENDER FRAME
+	// ========================================================================
+	// Draw the entire scene from the camera's perspective
+	// This is what actually displays everything on screen
 	renderer.render(scene, camera);
 
 }
