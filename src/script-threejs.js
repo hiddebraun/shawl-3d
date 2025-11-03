@@ -19,7 +19,7 @@ const ClothConfig = {
 	physicalSize: 2.0, // meters (or arbitrary units)
 	
 	// Texture settings
-	texturePath: 'texture.jpg', // Path to your texture image
+	texturePath: 'texture2.jpg', // Path to your texture image
 	
 	// Physics parameters
 	gravity: -9.8,
@@ -43,7 +43,7 @@ const ClothConfig = {
 	},
 	
 	// Wind settings
-	dynamicWind: true,
+	dynamicWind: false,
 	wind: [0.0, 0.0, 0.0], // if not dynamic
 	
 	// Scene settings
@@ -624,7 +624,7 @@ let isMouseDown = false;
 function init() {
 	// Scene setup
 	scene = new THREE.Scene();
-	scene.background = new THREE.Color(0.2, 0.2, 0.2);
+	scene.background = new THREE.Color(0, 0, 0);
 
 	// Camera
 	camera = new THREE.PerspectiveCamera(
