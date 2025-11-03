@@ -1,0 +1,27 @@
+/* Styles go here */
+body,
+html,
+canvas {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  overflow: hidden;
+}
+.info {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 400px;
+  font-family: sans-serif;
+  padding: 10px;
+  color: #c86e00;
+  -webkit-user-select: none;
+  user-select: none;
+}
+a:visited,
+a:hover,
+a:active {
+  color: #965000;
+}
